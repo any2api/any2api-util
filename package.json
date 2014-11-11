@@ -1,12 +1,25 @@
 {
   "name": "any2api-util",
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "author": "Johannes Wettinger <mail@jojow.de>",
+  "description": "Util functions for any2api (download, extract, checkout, etc.)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/any2api/any2api-util"
+  },
+  "contributors": [
+    {
+      "name": "Johannes Wettinger",
+      "email": "mail@jojow.de"
+    }
+  ],
+  "preferGlobal": false,
   "dependencies": {
-    "lodash": "*",
-    "debug": "*",
-    "download": "*",
-    "decompress": "*",
-    "fs-extra": "*",
-    "async": "*"
+    "lodash": "~2.4.1",
+    "debug": "~2.1.0",
+    "download": "~3.1.2",
+    "decompress": "~2.1.0",
+    "fs-extra": "~0.12.0",
+    "async": "~0.9.0"
   }
 }
