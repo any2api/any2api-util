@@ -136,7 +136,9 @@ var readInput = function(context, callback) {
       spec.apispec_path = apiSpecPathAbs;
 
       if (context.invoker_path) {
-        spec.invoker_path = context.invoker_path;
+        spec.invoker = spec.invoker || {};
+
+        spec.invoker.path = context.invoker_path;
       }
     } catch (err) {
       return callback(err);
@@ -150,6 +152,9 @@ var readInput = function(context, callback) {
   } else {
     return callback(new Error('neither environment variable APISPEC nor context.apispec_path defined'));
   }
+
+  spec.implementation = spec.implementation || {};
+  spec.invoker = spec.invoker || {};
 
   var params = {};
 
@@ -179,16 +184,16 @@ var placeExecutable = function(args, callback) {
     return done(new Error('dir missing'));
   }
 
-  var localExecPath = path.resolve(args.spec.apispec_path, '..', args.spec.executable_path);
+  var localExecPath = path.resolve(args.spec.apispec_path, '..', args.spec.executable.path);
 
   args.spec.apispec_path = path.join(args.dir, 'apispec.json');
 
-  args.spec.executable_path = args.dir;
+  args.spec.executable.path = args.dir;
 
   async.series([
-    async.apply(args.access.mkdir, { path: args.spec.executable_path }),
+    async.apply(args.access.mkdir, { path: args.spec.executable.path }),
     async.apply(args.access.writeFile, { path: args.spec.apispec_path, content: JSON.stringify(args.spec) }),
-    async.apply(args.access.copyDirToRemote, { sourcePath: localExecPath, targetPath: args.spec.executable_path })
+    async.apply(args.access.copyDirToRemote, { sourcePath: localExecPath, targetPath: args.spec.executable.path })
   ], callback);
 };
 
