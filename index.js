@@ -218,16 +218,24 @@ var writeSpec = function(args, callback) {
   });
 };
 
-var cloneSpec = function(apiSpec, callback) {
-  callback(null, cloneSpecSync(apiSpec));
-};
+var cloneSpec = function(args, callback) {
+  if (!args) {
+    return callback(new Error('args missing'));
+  } else if (!args.apiSpec) {
+    return callback(new Error('API spec missing'));
+  }
 
-var cloneSpecSync = function(apiSpec) {
+  var apiSpec = args.apiSpec;
+
   var clonedSpec = _.cloneDeep(apiSpec);
 
   clonedSpec.apispec_path = path.join(path.dirname(apiSpec.apispec_path), 'tmp-apispec-' + shortId.generate() + '.json');
 
-  return clonedSpec;
+  writeSpec({ apiSpec: clonedSpec }, function(err, writtenSpec) {
+    if (err) return callback(err);
+
+    callback(null, writtenSpec);
+  });
 };
 
 var updateInvokers = function(args, done) {
@@ -342,7 +350,6 @@ module.exports = {
   readInput: readInput,
   writeSpec: writeSpec,
   cloneSpec: cloneSpec,
-  cloneSpecSync: cloneSpecSync,
   updateInvokers: updateInvokers,
   prepareBuildtime: prepareBuildtime,
   prepareExecutable: prepareExecutable,

@@ -1,6 +1,6 @@
 {
   "name": "any2api-util",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Johannes Wettinger <mail@jojow.de>",
   "description": "Util functions for any2api (download, extract, checkout, etc.)",
   "repository": {
