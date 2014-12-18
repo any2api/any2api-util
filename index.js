@@ -2,10 +2,12 @@ var debug = require('debug')(require('./package.json').name);
 var path = require('path');
 var _ = require('lodash');
 var fs = require('fs-extra');
-var Decompress = require('decompress');
-var Download = require('download');
+var Decompress = null;
+var Download = null;
 var async = require('async');
 var shortId = require('shortid');
+var temp = null;
+var request = null;
 var childProc = require('child_process');
 
 
@@ -16,6 +18,8 @@ var specFile = 'apispec.json';
 
 var download = function(args, callback) {
   debug('download', args);
+
+  if (!Download) Download = require('download');
 
   if (!args) {
     return callback(new Error('args missing'));
@@ -47,6 +51,8 @@ var download = function(args, callback) {
 
 var extract = function(args, callback) {
   debug('extract', args);
+
+  if (!Decompress) Decompress = require('decompress');
 
   if (!args) {
     return callback(new Error('args missing'));
@@ -340,6 +346,403 @@ var prepareExecutable = function(args, done) {
     });
 };
 
+var persistEmbeddedExecutable = function(args, done) {
+  if (!temp) temp = require('temp').track();
+
+  if (!args) return done(new Error('args missing'));
+
+  var executable = args.executable;
+
+  if (!executable) return done(new Error('Executable missing'));
+  else if (!executable.files) return done(new Error('Executable has no files'));
+
+  //TODO: support executable.tarball_url
+
+  debug('persisting executable', executable);
+
+  temp.mkdir('tmp-executable-' + executable.name, function(err, execPath) {
+    executable.path = execPath;
+
+    async.eachSeries(executable.files, function(file, callback) {
+      if (!file.path) return callback();
+
+      fs.mkdirs(path.join(execPath, path.dirname(file.path)), function(err) {
+        if (err) return callback(err);
+
+        debug('persisting file', file);
+
+        if (file.text) {
+          fs.writeFile(path.join(execPath, file.path), file.text, 'utf8', callback);
+        } else if (file.object) {
+          fs.writeFile(path.join(execPath, file.path), JSON.stringify(file.object), 'utf8', callback);
+        } else if (file.base64) {
+          fs.writeFile(path.join(execPath, file.path), file.base64, 'base64', callback);
+        } else if (file.url) {
+          request = require('request');
+
+          request(file.url).pipe(fs.createWriteStream(path.join(execPath, file.path)))
+            .on('finish', callback)
+            .on('error', callback);
+        } else {
+          callback();
+        }
+      });
+    }, done);
+  });
+};
+
+var invokeExecutable = function(args, done) {
+  if (!temp) temp = require('temp').track();
+
+  debug('invocation triggered', args);
+
+  if (!args) return done(new Error('args missing'));
+
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  var preparedInvokers = args.preparedInvokers || {};
+
+  var run = args.run || {};
+  var apiSpecCopy;
+  var executable = null;
+
+  var invokerPath;
+  var invokerJson;
+
+  var runParams;
+  var enrichedParams;
+
+  async.series([
+    function(callback) {
+      cloneSpec({ apiSpec: apiSpec }, function(err, as) {
+        apiSpecCopy = as;
+
+        callback(err);
+      });
+    },
+    function(callback) {
+      // Executable
+      if (args.executable_name) {
+        executable = apiSpecCopy.executables[args.executable_name];
+
+        invokerPath = apiSpecCopy.invokers[executable.invoker_name].path;
+      } else if (args.invoker_name) {
+        invokerPath = apiSpecCopy.invokers[args.invoker_name].path;
+
+        if (run.executable) {
+          executable = run.executable;
+
+          executable.name = executable.name || 'embedded-' + shortId.generate();
+
+          executable.invoker_name = args.invoker_name;
+
+          apiSpecCopy.executables[executable.name] = executable;
+        }
+      }
+
+      if (!invokerPath) return callback(new Error('invoker path cannot be determined'));
+      else invokerPath = path.resolve(apiSpecCopy.apispec_path, '..', invokerPath);
+
+      if (executable) executable.name = args.executable_name || executable.name;
+
+      // Read invoker.json
+      invokerJson = JSON.parse(fs.readFileSync(path.join(invokerPath, 'invoker.json')));
+
+      // Process parameters
+      var paramsRequired = invokerJson.parameters_required || [];
+      var paramsSchema = invokerJson.parameters_schema;
+
+      if (_.isEmpty(run.parameters)) run.parameters = {};
+
+      runParams = { run_id: run._id || run.id || 'run-' + shortId.generate(),
+                    run_path: args.run_path || temp.path({ prefix: 'tmp-run-' }) };
+      enrichedParams = _.clone(run.parameters);
+      enrichedParams._ = runParams;
+
+      if (executable) {
+        runParams.executable_name = executable.name;
+        paramsRequired = _.uniq(paramsRequired.concat(executable.parameters_required || []));
+        paramsSchema = _.extend(paramsSchema, executable.parameters_schema)
+      }
+
+      _.each(paramsSchema, function(p, name) {
+        if (_.contains(paramsRequired, name) && !enrichedParams[name] && p.default) {
+          enrichedParams[name] = p.default;
+        }
+      });
+
+      debug('enriched params', enrichedParams);
+
+      callback();
+    },
+    function(callback) {
+      if (!executable || !executable.files) return callback();
+
+      persistEmbeddedExecutable({ executable: executable }, callback);
+    },
+    function(callback) {
+      if (executable && !executable.prepared) {
+        debug('preparing buildtime');
+
+        prepareBuildtime({ apiSpec: apiSpecCopy,
+                           preparedInvokers: preparedInvokers,
+                           executable_name: args.executable_name || executable.name },
+                         callback);
+      } else {
+        callback();
+      }
+    },
+    function(callback) {
+      if (executable && !executable.prepared) {
+        debug('preparing executable');
+
+        var updateSpecCallback = function(err, updApiSpec) {
+          if (err) return callback(err);
+
+          if (updApiSpec) apiSpecCopy = updApiSpec;
+
+          callback();
+        };
+
+        prepareExecutable({ apiSpec: apiSpecCopy,
+                            executable_name: args.executable_name || executable.name },
+                          updateSpecCallback);
+      } else {
+        callback();
+      }
+    },
+    function(callback) {
+      debug('running executable');
+
+      var options = {
+        cwd: invokerPath,
+        env: {
+          APISPEC: JSON.stringify(apiSpecCopy),
+          PARAMETERS: JSON.stringify(enrichedParams),
+          PATH: process.env.PATH
+        }
+      };
+
+      childProc.exec('npm start', options, function(err, stdout, stderr) {
+        debug('run complete');
+
+        run.results = run.results || {};
+
+        run.results.stdout = stdout;
+        run.results.stderr = stderr;
+
+        callback(err);
+      });
+    },
+    function(callback) {
+      var results_schema = invokerJson.results_schema || {};
+
+      if (executable) _.extend(results_schema, executable.results_schema);
+
+      var filesDir = runParams.run_path;// || invokerPath;
+
+      async.eachSeries(_.keys(results_schema), function(name, callback) {
+        var r = results_schema[name];
+
+        if (r.mapping === 'stdout') {
+          run.results[name] = run.results.stdout;
+
+          delete run.results.stdout;
+        } else if (r.mapping === 'stderr') {
+          run.results[name] = run.results.stderr;
+
+          delete run.results.stderr;
+        } else if (r.mapping === 'file' && r.file_path) {
+          var filePath = path.resolve(filesDir, r.file_path);
+
+          if (!fs.existsSync(filePath)) {
+            return callback(new Error('results file missing: ' + filePath));
+          }
+
+          run.results[name] = fs.readFileSync(filePath, 'utf8');
+        }
+
+        if (r.type === 'object') {
+          run.results[name] = JSON.parse(run.results[name]);
+        }
+
+        callback();
+      }, callback);
+    }
+  ], function(err) {
+    if (err) {
+      debug('error', err);
+
+      run.status = 'error';
+      run.failed = new Date().toString();
+
+      run.error = err.message;
+    } else {
+      run.status = 'finished';
+      run.finished = new Date().toString();
+    }
+
+    async.parallel([
+      function(callback) {
+        fs.remove(runParams.run_path, callback);
+      },
+      function(callback) {
+        fs.remove(apiSpecCopy.apispec_path, callback);
+      }
+    ], function(err2) {
+      if (err2) console.error(err2);
+
+      done(err, run);
+    });
+  });
+};
+
+var collectResults = function(args, done) {
+  if (!args) return done(new Error('args missing'));
+
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  var access = args.access;
+  if (!access) return done(new Error('access missing'));
+
+  var localPath = args.localPath;
+  if (!localPath) return done(new Error('localPath missing'));
+
+  var remotePath = args.remotePath;
+  if (!remotePath) return done(new Error('remotePath missing'));
+
+  var executable = apiSpec.executables[args.executable_name];
+  if (!executable) return done(new Error('executable_name missing or invalid'));
+
+  if (!executable.results_schema) return done();
+
+  async.eachSeries(_.keys(executable.results_schema), function(name, callback) {
+    var r = executable.results_schema[name];
+
+    //TODO support for r.mapping = 'dir'
+    if (r.mapping === 'file' && r.file_path) {
+      var local = path.resolve(localPath, r.file_path);
+      var remote = path.join(remotePath, r.file_path);
+
+      access.exists({ path: remote }, function(err, exists) {
+        if (err) return callback(err);
+
+        if (!exists) {
+          debug('file does not exist remotely: ' + remote);
+
+          return callback();
+        }
+
+        var content = null;
+
+        async.series([
+          async.apply(fs.mkdirs, path.dirname(local)),
+          function(callback) {
+            access.readFile({ path: remote, options: { encoding: 'utf8' } }, function(err, c) {
+              content = c;
+
+              callback(err);
+            });
+          },
+          function(callback) {
+            fs.writeFile(local, content, { encoding: 'utf8' }, callback);
+          }
+        ], callback);
+      });
+    } else {
+      callback();
+    }
+  }, function(err) {
+    done();
+  });
+};
+
+var generateExampleSync = function(args) {
+  var parameters_schema = args.parameters_schema;
+  var parameters_required = args.parameters_required;
+
+  //TODO process results and results schema if given
+
+  var example = {
+    parameters: {
+      invoker_config: {
+        some_config_param: 'some_value'
+      },
+      some_param: 'some_value'
+    }
+  };
+
+  var limit = args.limit || 6;
+  var count = 0;
+
+  _.each(parameters_schema, function(param, name) {
+    if (count > limit && !_.contains(parameters_required, name)) return;
+
+    if (param.default) {
+      example.parameters[name] = param.default;
+    } else if (param.type === 'object' && param.properties) {
+      var p = example.parameters[name] = {};
+
+      _.each(param.properties, function(props, name) {
+        if (props.default) p[name] = props.default;
+      });
+    }
+
+    count++;
+  });
+
+  return example;
+};
+
+var embeddedExecutableSchema = {
+  type: 'object',
+  oneOf: [
+    {
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'object',
+            oneOf: [
+              {
+                properties: {
+                  path: { type: 'string' },
+                  text: { type: 'string' }
+                }
+              },
+              {
+                properties: {
+                  path: { type: 'string' },
+                  object: { type: 'object' }
+                }
+              },
+              {
+                properties: {
+                  path: { type: 'string' },
+                  base64: { type: 'string' }
+                }
+              },
+              {
+                properties: {
+                  path: { type: 'string' },
+                  url: { type: 'string' }
+                }
+              }
+            ]
+          }
+        } 
+      }
+    },
+    {
+      properties: {
+        tarball_url: { type: 'string' }
+      }
+    }
+  ]
+};
+
 
 
 module.exports = {
@@ -353,4 +756,9 @@ module.exports = {
   updateInvokers: updateInvokers,
   prepareBuildtime: prepareBuildtime,
   prepareExecutable: prepareExecutable,
+  persistEmbeddedExecutable: persistEmbeddedExecutable,
+  invokeExecutable: invokeExecutable,
+  collectResults: collectResults,
+  generateExampleSync: generateExampleSync,
+  embeddedExecutableSchema: embeddedExecutableSchema
 };
