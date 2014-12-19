@@ -817,6 +817,7 @@ module.exports = {
   persistEmbeddedExecutable: persistEmbeddedExecutable,
   invokeExecutable: invokeExecutable,
   collectResults: collectResults,
+  writeParameters: writeParameters,
   generateExampleSync: generateExampleSync,
   embeddedExecutableSchema: embeddedExecutableSchema
 };
