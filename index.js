@@ -21,9 +21,9 @@ var download = function(args, callback) {
 
   if (!Download) Download = require('download');
 
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.url) {
+  args = args || {};
+
+  if (!args.url) {
     return callback(new Error('url missing'));
   } else if (!args.dir) {
     return callback(new Error('dir missing'));
@@ -54,9 +54,9 @@ var extract = function(args, callback) {
 
   if (!Decompress) Decompress = require('decompress');
 
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.file) {
+  args = args || {};
+
+  if (!args.file) {
     return callback(new Error('file missing'));
   } else if (!args.dir) {
     return callback(new Error('dir missing'));
@@ -84,9 +84,9 @@ var extract = function(args, callback) {
 var checkoutGit = function(args, callback) {
   debug('checkout', args);
 
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.url) {
+  args = args || {};
+
+  if (!args.url) {
     return callback(new Error('url missing'));
   } else if (!args.dir) {
     return callback(new Error('dir missing'));
@@ -107,9 +107,9 @@ var checkoutGit = function(args, callback) {
 var checkoutBzr = function(args, callback) {
   debug('checkout', args);
 
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.url) {
+  args = args || {};
+
+  if (!args.url) {
     return callback(new Error('url missing'));
   } else if (!args.dir) {
     return callback(new Error('dir missing'));
@@ -191,9 +191,9 @@ var readInput = function(args, callback) {
 };
 
 var writeSpec = function(args, callback) {
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.apiSpec) {
+  args = args || {};
+  
+  if (!args.apiSpec) {
     return callback(new Error('API spec missing'));
   }
 
@@ -225,9 +225,9 @@ var writeSpec = function(args, callback) {
 };
 
 var cloneSpec = function(args, callback) {
-  if (!args) {
-    return callback(new Error('args missing'));
-  } else if (!args.apiSpec) {
+  args = args || {};
+
+  if (!args.apiSpec) {
     return callback(new Error('API spec missing'));
   }
 
@@ -276,7 +276,9 @@ var updateInvokers = function(args, done) {
   done(null, apiSpec);
 };
 
-var prepareBuildtime = function(args, done) {
+var prepareInvoker = function(args, done) {
+  args = args || {};
+
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
 
@@ -296,7 +298,7 @@ var prepareBuildtime = function(args, done) {
 
   preparedInvokers[invokerName] = true;
 
-  childProc.exec('npm run prepare-buildtime',
+  childProc.exec('npm run ' + args.command,
     { cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
       env: { PATH: process.env.PATH } },
     function(err, stdout, stderr) {
@@ -309,6 +311,20 @@ var prepareBuildtime = function(args, done) {
 
       done();
     });
+};
+
+var prepareBuildtime = function(args, done) {
+  args = args || {};
+  args.command = 'prepare-buildtime';
+
+  prepareInvoker(args, done);
+};
+
+var prepareRuntime = function(args, done) {
+  args = args || {};
+  args.command = 'prepare-runtime';
+
+  prepareInvoker(args, done);
 };
 
 var prepareExecutable = function(args, done) {
@@ -349,7 +365,7 @@ var prepareExecutable = function(args, done) {
 var persistEmbeddedExecutable = function(args, done) {
   if (!temp) temp = require('temp').track();
 
-  if (!args) return done(new Error('args missing'));
+  args = args || {};
 
   var executable = args.executable;
 
@@ -396,7 +412,7 @@ var invokeExecutable = function(args, done) {
 
   debug('invocation triggered', args);
 
-  if (!args) return done(new Error('args missing'));
+  args = args || {};
 
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
@@ -599,7 +615,7 @@ var invokeExecutable = function(args, done) {
 };
 
 var collectResults = function(args, done) {
-  if (!args) return done(new Error('args missing'));
+  args = args || {};
 
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
@@ -660,7 +676,7 @@ var collectResults = function(args, done) {
 };
 
 var writeParameters = function(args, done) {
-  if (!args) return done(new Error('args missing'));
+  args = args || {};
 
   var schema = args.parametersSchema;
   if (!schema) return done(new Error('parametersSchema missing'));
@@ -787,6 +803,7 @@ module.exports = {
   cloneSpec: cloneSpec,
   updateInvokers: updateInvokers,
   prepareBuildtime: prepareBuildtime,
+  prepareRuntime: prepareRuntime,
   prepareExecutable: prepareExecutable,
   persistEmbeddedExecutable: persistEmbeddedExecutable,
   invokeExecutable: invokeExecutable,
