@@ -659,6 +659,38 @@ var collectResults = function(args, done) {
   });
 };
 
+var writeParameters = function(args, done) {
+  if (!args) return done(new Error('args missing'));
+
+  var schema = args.parametersSchema;
+  if (!schema) return done(new Error('parametersSchema missing'));
+
+  var params = args.parameters;
+  if (!params) return done(new Error('parameters missing'));
+
+  var access = args.access;
+  if (!access) return done(new Error('access missing'));
+
+  var remotePath = args.remotePath;
+  if (!remotePath) return done(new Error('remotePath missing'));
+
+  async.eachSeries(_.keys(schema), function(name, callback) {
+    var def = schema[name];
+    var val = params[name];
+
+    if (def.mapping !== 'file' || !def.file_path || !val) {
+      return callback();
+    }
+
+    var absFilePath = path.join(remotePath, def.file_path);
+
+    async.series([
+      async.apply(access.mkdir, { path: path.dirname(absFilePath) }),
+      async.apply(access.writeFile, { path: absFilePath, content: val })
+    ], callback);
+  }, done);
+};
+
 var generateExampleSync = function(args) {
   var parameters_schema = args.parameters_schema;
   var parameters_required = args.parameters_required;
