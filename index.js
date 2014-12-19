@@ -343,8 +343,6 @@ var prepareExecutable = function(args, done) {
 
   debug('preparing executable', apiSpec.executables[args.executable_name]);
 
-  apiSpec.executables[args.executable_name].prepared = true;
-
   childProc.exec('npm run prepare-executable',
     { cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
       env: { APISPEC: JSON.stringify(apiSpec),
@@ -358,7 +356,13 @@ var prepareExecutable = function(args, done) {
         return done(err);
       }
 
-      readInput(apiSpec, done);
+      readInput(apiSpec, function(err, apiSpec) {
+        if (err) return done(err);
+
+        apiSpec.executables[args.executable_name].prepared = true;
+
+        done(null, apiSpec);
+      });
     });
 };
 
