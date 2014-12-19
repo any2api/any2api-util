@@ -624,6 +624,11 @@ var collectResults = function(args, done) {
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
 
+  var executable = apiSpec.executables[args.executable_name];
+  if (!executable) return done(new Error('executable_name missing or invalid'));
+
+  if (!executable.results_schema) return done();
+
   var access = args.access;
   if (!access) return done(new Error('access missing'));
 
@@ -632,11 +637,6 @@ var collectResults = function(args, done) {
 
   var remotePath = args.remotePath;
   if (!remotePath) return done(new Error('remotePath missing'));
-
-  var executable = apiSpec.executables[args.executable_name];
-  if (!executable) return done(new Error('executable_name missing or invalid'));
-
-  if (!executable.results_schema) return done();
 
   async.eachSeries(_.keys(executable.results_schema), function(name, callback) {
     var r = executable.results_schema[name];
@@ -675,15 +675,20 @@ var collectResults = function(args, done) {
       callback();
     }
   }, function(err) {
-    done();
+    done(err);
   });
 };
 
 var writeParameters = function(args, done) {
   args = args || {};
 
-  var schema = args.parametersSchema;
-  if (!schema) return done(new Error('parametersSchema missing'));
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  var executable = apiSpec.executables[args.executable_name];
+  if (!executable) return done(new Error('executable_name missing or invalid'));
+
+  if (!executable.parameters_schema) return done();
 
   var params = args.parameters;
   if (!params) return done(new Error('parameters missing'));
@@ -694,8 +699,8 @@ var writeParameters = function(args, done) {
   var remotePath = args.remotePath;
   if (!remotePath) return done(new Error('remotePath missing'));
 
-  async.eachSeries(_.keys(schema), function(name, callback) {
-    var def = schema[name];
+  async.eachSeries(_.keys(executable.parameters_schema), function(name, callback) {
+    var def = executable.parameters_schema[name];
     var val = params[name];
 
     if (def.mapping !== 'file' || !def.file_path || !val) {
