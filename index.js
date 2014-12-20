@@ -300,7 +300,7 @@ var prepareInvoker = function(args, done) {
 
   childProc.exec('npm run ' + args.command,
     { cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
-      env: { PATH: process.env.PATH } },
+      env: process.env || {} },
     function(err, stdout, stderr) {
       if (err) {
         err.stderr = stderr;
@@ -343,12 +343,17 @@ var prepareExecutable = function(args, done) {
 
   debug('preparing executable', apiSpec.executables[args.executable_name]);
 
-  childProc.exec('npm run prepare-executable',
-    { cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
-      env: { APISPEC: JSON.stringify(apiSpec),
-             PARAMETERS: JSON.stringify({ _: { executable_name: args.executable_name } }),
-             PATH: process.env.PATH } },
-    function(err, stdout, stderr) {
+  var options = {
+    cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
+    env: {
+      APISPEC: JSON.stringify(apiSpec),
+      PARAMETERS: JSON.stringify({ _: { executable_name: args.executable_name } })
+    }
+  };
+
+  options.env = _.extend(_.clone(process.env || {}), options.env);
+
+  childProc.exec('npm run prepare-executable', options, function(err, stdout, stderr) {
       if (err) {
         err.stderr = stderr;
         err.stdout = stdout;
@@ -539,10 +544,11 @@ var invokeExecutable = function(args, done) {
         cwd: invokerPath,
         env: {
           APISPEC: JSON.stringify(apiSpecCopy),
-          PARAMETERS: JSON.stringify(enrichedParams),
-          PATH: process.env.PATH
+          PARAMETERS: JSON.stringify(enrichedParams)
         }
       };
+
+      options.env = _.extend(_.clone(process.env || {}), options.env);
 
       childProc.exec('npm start', options, function(err, stdout, stderr) {
         debug('run complete');
