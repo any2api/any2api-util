@@ -722,6 +722,64 @@ var writeParameters = function(args, done) {
   }, done);
 };
 
+var getMappedParametersSync = function(args, done) {
+  args = args || {};
+
+  var mappingType = args.mappingType;
+  if (!mappingType) return done(new Error('mapping type missing'));
+
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  var executable = apiSpec.executables[args.executable_name];
+  if (!executable) return done(new Error('executable_name missing or invalid'));
+
+  if (!executable.parameters_schema) return done();
+
+  var params = args.parameters || {};
+
+  var mapped = {};
+
+  _.each(executable.parameters_schema, function(def, name) {
+    if (def && def.mapping && def.mapping === mappingType) {
+      mapped[name] = def;
+
+      if (params[name]) mapped[name].value = params[name];
+    }
+  });
+
+  return mapped;
+};
+
+var getMappedResultsSync = function(args, done) {
+  args = args || {};
+
+  var mappingType = args.mappingType;
+  if (!mappingType) return done(new Error('mapping type missing'));
+
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  var executable = apiSpec.executables[args.executable_name];
+  if (!executable) return done(new Error('executable_name missing or invalid'));
+
+  if (!executable.results_schema) return done();
+
+  var results = args.results || {};
+
+  var mapped = {};
+
+  _.each(executable.parameters_schema, function(def, name) {
+    if (def && def.mapping && def.mapping === mappingType) {
+      mapped[name] = def;
+
+      if (results[name]) mapped[name].value = results[name];
+    }
+  });
+
+  return mapped;
+};
+
 var generateExampleSync = function(args) {
   var parameters_schema = args.parameters_schema;
   var parameters_required = args.parameters_required;
@@ -824,6 +882,8 @@ module.exports = {
   invokeExecutable: invokeExecutable,
   collectResults: collectResults,
   writeParameters: writeParameters,
+  getMappedParametersSync: getMappedParametersSync,
+  getMappedResultsSync: getMappedResultsSync,
   generateExampleSync: generateExampleSync,
   embeddedExecutableSchema: embeddedExecutableSchema
 };
