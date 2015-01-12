@@ -589,7 +589,7 @@ var invokeExecutable = function(args, done) {
           run.results[name] = fs.readFileSync(filePath, 'utf8');
         }
 
-        if (r.type === 'object') {
+        if (r.type === 'json_object') {
           run.results[name] = JSON.parse(run.results[name]);
         }
 
