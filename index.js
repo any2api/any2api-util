@@ -428,14 +428,14 @@ var invokeExecutable = function(args, done) {
 
   var preparedInvokers = args.preparedInvokers || {};
 
-  var run = args.run || {};
+  var instance = args.instance || args.run || {};
   var apiSpecCopy;
   var executable = null;
 
   var invokerPath;
   var invokerJson;
 
-  var runParams;
+  var instanceParams;
   var enrichedParams;
 
   async.series([
@@ -455,8 +455,8 @@ var invokeExecutable = function(args, done) {
       } else if (args.invoker_name) {
         invokerPath = apiSpecCopy.invokers[args.invoker_name].path;
 
-        if (run.executable) {
-          executable = run.executable;
+        if (instance.executable) {
+          executable = instance.executable;
 
           executable.name = executable.name || 'embedded-' + shortId.generate();
 
@@ -478,15 +478,15 @@ var invokeExecutable = function(args, done) {
       var paramsRequired = invokerJson.parameters_required || [];
       var paramsSchema = invokerJson.parameters_schema;
 
-      if (_.isEmpty(run.parameters)) run.parameters = {};
+      if (_.isEmpty(instance.parameters)) instance.parameters = {};
 
-      runParams = { run_id: run._id || run.id || 'run-' + shortId.generate(),
-                    run_path: args.run_path || temp.path({ prefix: 'tmp-run-' }) };
-      enrichedParams = _.clone(run.parameters);
-      enrichedParams._ = runParams;
+      instanceParams = { instance_id: instance._id || instance.id || 'instance-' + shortId.generate(),
+                         instance_path: args.instance_path || temp.path({ prefix: 'tmp-instance-' }) };
+      enrichedParams = _.clone(instance.parameters);
+      enrichedParams._ = instanceParams;
 
       if (executable) {
-        runParams.executable_name = executable.name;
+        instanceParams.executable_name = executable.name;
         paramsRequired = _.uniq(paramsRequired.concat(executable.parameters_required || []));
         paramsSchema = _.extend(paramsSchema, executable.parameters_schema)
       }
@@ -551,12 +551,12 @@ var invokeExecutable = function(args, done) {
       options.env = _.extend(_.clone(process.env || {}), options.env);
 
       childProc.exec('npm start', options, function(err, stdout, stderr) {
-        debug('run complete');
+        debug('instance finished');
 
-        run.results = run.results || {};
+        instance.results = instance.results || {};
 
-        run.results.stdout = stdout;
-        run.results.stderr = stderr;
+        instance.results.stdout = stdout;
+        instance.results.stderr = stderr;
 
         callback(err);
       });
@@ -566,19 +566,19 @@ var invokeExecutable = function(args, done) {
 
       if (executable) _.extend(results_schema, executable.results_schema);
 
-      var filesDir = runParams.run_path;// || invokerPath;
+      var filesDir = instanceParams.instance_path;// || invokerPath;
 
       async.eachSeries(_.keys(results_schema), function(name, callback) {
         var r = results_schema[name];
 
         if (r.mapping === 'stdout') {
-          run.results[name] = run.results.stdout;
+          instance.results[name] = instance.results.stdout;
 
-          delete run.results.stdout;
+          delete instance.results.stdout;
         } else if (r.mapping === 'stderr') {
-          run.results[name] = run.results.stderr;
+          instance.results[name] = instance.results.stderr;
 
-          delete run.results.stderr;
+          delete instance.results.stderr;
         } else if (r.mapping === 'file' && r.file_path) {
           var filePath = path.resolve(filesDir, r.file_path);
 
@@ -586,11 +586,11 @@ var invokeExecutable = function(args, done) {
             return callback(new Error('results file missing: ' + filePath));
           }
 
-          run.results[name] = fs.readFileSync(filePath, 'utf8');
+          instance.results[name] = fs.readFileSync(filePath, 'utf8');
         }
 
         if (r.type === 'json_object') {
-          run.results[name] = JSON.parse(run.results[name]);
+          instance.results[name] = JSON.parse(instance.results[name]);
         }
 
         callback();
@@ -600,18 +600,18 @@ var invokeExecutable = function(args, done) {
     if (err) {
       debug('error', err);
 
-      run.status = 'error';
-      run.failed = new Date().toString();
+      instance.status = 'error';
+      instance.failed = new Date().toString();
 
-      run.error = err.message;
+      instance.error = err.message;
     } else {
-      run.status = 'finished';
-      run.finished = new Date().toString();
+      instance.status = 'finished';
+      instance.finished = new Date().toString();
     }
 
     async.parallel([
       function(callback) {
-        fs.remove(runParams.run_path, callback);
+        fs.remove(instanceParams.instance_path, callback);
       },
       function(callback) {
         fs.remove(apiSpecCopy.apispec_path, callback);
@@ -619,7 +619,7 @@ var invokeExecutable = function(args, done) {
     ], function(err2) {
       if (err2) console.error(err2);
 
-      done(err, run);
+      done(err, instance);
     });
   });
 };
