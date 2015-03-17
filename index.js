@@ -276,7 +276,7 @@ var enrichSpec = function(args, done) {
         executable.parameters_schema = _.extend(paramsSchema, executable.parameters_schema);
 
         var paramsRequired = invoker.parameters_required || [];
-        executable.parameters_required = paramsRequired.concat(executable.parameters_required || []);
+        executable.parameters_required = _.uniq(paramsRequired.concat(executable.parameters_required || []));
 
         var resultsSchema = _.cloneDeep(invoker.results_schema);
         executable.results_schema = _.extend(resultsSchema, executable.results_schema);
