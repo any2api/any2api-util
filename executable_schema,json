@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "oneOf": [
+    {
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "oneOf": [
+              {
+                "properties": {
+                  "path": { "type": "string" },
+                  "text": { "type": "string" }
+                }
+              },
+              {
+                "properties": {
+                  "path": { "type": "string" },
+                  "object": { "type": "object" }
+                }
+              },
+              {
+                "properties": {
+                  "path": { "type": "string" },
+                  "base64": { "type": "string" }
+                }
+              },
+              {
+                "properties": {
+                  "path": { "type": "string" },
+                  "url": { "type": "string" }
+                }
+              }
+            ]
+          }
+        } 
+      }
+    },
+    {
+      "properties": {
+        "tarball_url": { "type": "string" }
+      }
+    }
+  ]
+}

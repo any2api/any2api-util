@@ -193,9 +193,7 @@ var readInput = function(args, callback) {
 var writeSpec = function(args, callback) {
   args = args || {};
   
-  if (!args.apiSpec) {
-    return callback(new Error('API spec missing'));
-  }
+  if (!args.apiSpec) return callback(new Error('API spec missing'));
 
   var apiSpec = args.apiSpec;
   var specPath = args.specPath || apiSpec.apispec_path;
@@ -227,9 +225,7 @@ var writeSpec = function(args, callback) {
 var cloneSpec = function(args, callback) {
   args = args || {};
 
-  if (!args.apiSpec) {
-    return callback(new Error('API spec missing'));
-  }
+  if (!args.apiSpec) return callback(new Error('API spec missing'));
 
   var apiSpec = args.apiSpec;
 
@@ -241,6 +237,55 @@ var cloneSpec = function(args, callback) {
     if (err) return callback(err);
 
     callback(null, writtenSpec);
+  });
+};
+
+var enrichSpec = function(args, done) {
+  args = args || {};
+
+  var apiSpec = args.apiSpec;
+  if (!apiSpec) return done(new Error('API spec missing'));
+
+  async.series([
+    function(callback) {
+      async.each(_.keys(apiSpec.invokers), function(name, callback) {
+        var invoker = apiSpec.invokers[name];
+
+        fs.readFile(path.resolve(implPath, invoker.path, 'invoker.json'), 'utf8', function(err, content) {
+          if (err) return callback(err);
+
+          var parsed = JSON.parse(content);
+
+          invoker.parameters_schema = parsed.parameters_schema || {};
+          invoker.parameters_required = parsed.parameters_required || [];
+          invoker.results_schema = parsed.results_schema || {};
+
+          callback();
+        });
+      }, callback);
+    },
+    function(callback) {
+      _.each(apiSpec.executables, function(executable, name) {
+        var invoker = apiSpec.invokers[executable.invoker_name];
+
+        if (!invoker) return;
+
+        var paramsSchema = _.cloneDeep(invoker.parameters_schema);
+        executable.parameters_schema = _.extend(paramsSchema, executable.parameters_schema);
+
+        var paramsRequired = invoker.parameters_required || [];
+        executable.parameters_required = paramsRequired.concat(executable.parameters_required || []);
+
+        var resultsSchema = _.cloneDeep(invoker.results_schema);
+        executable.results_schema = _.extend(resultsSchema, executable.results_schema);
+      });
+
+      callback();
+    }
+  ], function(err) {
+    if (err) return done(err);
+
+    done(null, apiSpec);
   });
 };
 
@@ -722,19 +767,19 @@ var writeParameters = function(args, done) {
   }, done);
 };
 
-var getMappedParametersSync = function(args, done) {
+var getMappedParametersSync = function(args) {
   args = args || {};
 
   var mappingType = args.mappingType;
-  if (!mappingType) return done(new Error('mapping type missing'));
+  if (!mappingType) throw new Error('mapping type missing');
 
   var apiSpec = args.apiSpec;
-  if (!apiSpec) return done(new Error('API spec missing'));
+  if (!apiSpec) throw new Error('API spec missing');
 
   var executable = apiSpec.executables[args.executable_name];
-  if (!executable) return done(new Error('executable_name missing or invalid'));
+  if (!executable) throw new Error('executable_name missing or invalid');
 
-  if (!executable.parameters_schema) return done();
+  if (!executable.parameters_schema) return {};
 
   var params = args.parameters || {};
 
@@ -751,19 +796,19 @@ var getMappedParametersSync = function(args, done) {
   return mapped;
 };
 
-var getMappedResultsSync = function(args, done) {
+var getMappedResultsSync = function(args) {
   args = args || {};
 
   var mappingType = args.mappingType;
-  if (!mappingType) return done(new Error('mapping type missing'));
+  if (!mappingType) throw new Error('mapping type missing');
 
   var apiSpec = args.apiSpec;
-  if (!apiSpec) return done(new Error('API spec missing'));
+  if (!apiSpec) throw new Error('API spec missing');
 
   var executable = apiSpec.executables[args.executable_name];
-  if (!executable) return done(new Error('executable_name missing or invalid'));
+  if (!executable) throw new Error('executable_name missing or invalid');
 
-  if (!executable.results_schema) return done();
+  if (!executable.results_schema) return {};
 
   var results = args.results || {};
 
@@ -781,6 +826,8 @@ var getMappedResultsSync = function(args, done) {
 };
 
 var generateExampleSync = function(args) {
+  args = args || {};
+
   var parameters_schema = args.parameters_schema;
   var parameters_required = args.parameters_required;
 
@@ -817,53 +864,6 @@ var generateExampleSync = function(args) {
   return example;
 };
 
-var embeddedExecutableSchema = {
-  type: 'object',
-  oneOf: [
-    {
-      properties: {
-        files: {
-          type: 'array',
-          items: {
-            type: 'object',
-            oneOf: [
-              {
-                properties: {
-                  path: { type: 'string' },
-                  text: { type: 'string' }
-                }
-              },
-              {
-                properties: {
-                  path: { type: 'string' },
-                  object: { type: 'object' }
-                }
-              },
-              {
-                properties: {
-                  path: { type: 'string' },
-                  base64: { type: 'string' }
-                }
-              },
-              {
-                properties: {
-                  path: { type: 'string' },
-                  url: { type: 'string' }
-                }
-              }
-            ]
-          }
-        } 
-      }
-    },
-    {
-      properties: {
-        tarball_url: { type: 'string' }
-      }
-    }
-  ]
-};
-
 
 
 module.exports = {
@@ -874,6 +874,7 @@ module.exports = {
   readInput: readInput,
   writeSpec: writeSpec,
   cloneSpec: cloneSpec,
+  enrichSpec: enrichSpec,
   updateInvokers: updateInvokers,
   prepareBuildtime: prepareBuildtime,
   prepareRuntime: prepareRuntime,
@@ -885,5 +886,6 @@ module.exports = {
   getMappedParametersSync: getMappedParametersSync,
   getMappedResultsSync: getMappedResultsSync,
   generateExampleSync: generateExampleSync,
-  embeddedExecutableSchema: embeddedExecutableSchema
+  embeddedExecutableSchema: require('./executable_schema.json'),
+  embeddedExecutableSchemaXml: fs.readFileSync('./executable_schema.xsd')
 };

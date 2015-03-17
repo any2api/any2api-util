@@ -1,0 +1,27 @@
+<choice minOccurs="1" maxOccurs="1">
+  <element name="files">
+    <complexType>
+      <sequence>
+        <element name="file" minOccurs="1" maxOccurs="unbounded">
+          <complexType>
+            <simpleContent>
+              <extension base="xsd:string">
+                <attribute name="path" type="xsd:string" use="required"/>
+                <attribute name="source" use="required">
+                  <simpleType>
+                    <restriction base="xsd:string">
+                      <enumeration value="text"/>
+                      <enumeration value="base64"/>
+                      <enumeration value="url"/>
+                    </restriction>
+                  </simpleType>
+                </attribute>
+              </extension>
+            </simpleContent>
+          </complexType>
+        </element>
+      </sequence>
+    </complexType>
+  </element>
+  <element name="tarballUrl" type="xsd:string"/>
+</choice>
