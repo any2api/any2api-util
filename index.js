@@ -887,5 +887,5 @@ module.exports = {
   getMappedResultsSync: getMappedResultsSync,
   generateExampleSync: generateExampleSync,
   embeddedExecutableSchema: require('./executable_schema.json'),
-  embeddedExecutableSchemaXml: fs.readFileSync('./executable_schema.xsd')
+  embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'))
 };
