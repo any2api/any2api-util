@@ -246,12 +246,14 @@ var enrichSpec = function(args, done) {
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
 
+  var basePath = args.basePath || '';
+
   async.series([
     function(callback) {
       async.each(_.keys(apiSpec.invokers), function(name, callback) {
         var invoker = apiSpec.invokers[name];
 
-        fs.readFile(path.resolve(implPath, invoker.path, 'invoker.json'), 'utf8', function(err, content) {
+        fs.readFile(path.resolve(basePath, invoker.path, 'invoker.json'), 'utf8', function(err, content) {
           if (err) return callback(err);
 
           var parsed = JSON.parse(content);
