@@ -317,7 +317,7 @@ var updateInvokers = function(args, done) {
 
     if (!props.path) return done(new Error('invoker ' + name + ' missing'));
 
-    props.expose = props.expose || true;
+    if (!_.isBoolean(props.expose) props.expose = true;
   });
 
   done(null, apiSpec);
