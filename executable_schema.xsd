@@ -7,7 +7,7 @@
             <simpleContent>
               <extension base="xsd:string">
                 <attribute name="path" type="xsd:string" use="required"/>
-                <attribute name="source" use="required">
+                <attribute name="contentSource" use="required">
                   <simpleType>
                     <restriction base="xsd:string">
                       <enumeration value="text"/>
