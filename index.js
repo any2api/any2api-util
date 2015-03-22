@@ -306,7 +306,7 @@ var updateInvokers = function(args, done) {
     props.invoker_name = props.invoker_name || props.kind || props.type;
 
     if (!props.invoker_name) {
-      return done(new Error('neither invoker name nor kind of executable type defined in API spec for executable ' + name));
+      return done(new Error('neither invoker name nor kind of executable defined in API spec for executable ' + name));
     } else {
       apiSpec.invokers[props.invoker_name] = apiSpec.invokers[props.invoker_name] || {};
     }
