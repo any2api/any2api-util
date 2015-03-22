@@ -303,16 +303,20 @@ var updateInvokers = function(args, done) {
   _.each(apiSpec.executables, function(props, name) {
     if (props.invoker_name && apiSpec.invokers[props.invoker_name]) return;
 
-    if (!props.invoker_name) props.invoker_name = props.type;
+    props.invoker_name = props.invoker_name || props.kind || props.type;
 
     if (!props.invoker_name) {
-      return done(new Error('neither invoker name nor executable type defined in API spec for executable ' + name));
+      return done(new Error('neither invoker name nor kind of executable type defined in API spec for executable ' + name));
     } else {
       apiSpec.invokers[props.invoker_name] = apiSpec.invokers[props.invoker_name] || {};
     }
   });
 
   _.each(apiSpec.invokers, function(props, name) {
+    if (props.path && !fs.existsSync(path.join(path.dirname(apiSpec.apispec_path), props.path, 'invoker.json'))) {
+      return done(new Error('invalid path specified for invoker ' + name + ': invoker.json file not found'));
+    }
+
     props.path = props.path || invokers.getPathSync(name);
 
     if (!props.path) return done(new Error('invoker ' + name + ' missing'));
