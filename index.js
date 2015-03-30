@@ -14,6 +14,7 @@ var childProc = require('child_process');
 
 var specFile = 'apispec.json';
 var childProcTimeout = 2 * 60 * 1000; // 2mins
+var childProcKillSignal = 'SIGKILL';
 
 
 
@@ -353,7 +354,8 @@ var prepareInvoker = function(args, done) {
   var options = { 
     cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
     env: process.env || {},
-    timeout: args.timeout || childProcTimeout
+    timeout: args.timeout || childProcTimeout,
+    killSignal: childProcKillSignal
   };
 
   childProc.exec('npm run ' + args.command, options, function(err, stdout, stderr) {
@@ -404,7 +406,8 @@ var prepareExecutable = function(args, done) {
       APISPEC: JSON.stringify(apiSpec),
       PARAMETERS: JSON.stringify({ _: { executable_name: args.executable_name } })
     },
-    timeout: args.timeout || childProcTimeout
+    timeout: args.timeout || childProcTimeout,
+    killSignal: childProcKillSignal
   };
 
   options.env = _.extend(_.clone(process.env || {}), options.env);
@@ -602,7 +605,8 @@ var invokeExecutable = function(args, done) {
           APISPEC: JSON.stringify(apiSpecCopy),
           PARAMETERS: JSON.stringify(enrichedParams)
         },
-        timeout: args.timeout || childProcTimeout
+        timeout: args.timeout || childProcTimeout,
+        killSignal: childProcKillSignal
       };
 
       options.env = _.extend(_.clone(process.env || {}), options.env);
