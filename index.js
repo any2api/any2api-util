@@ -13,6 +13,7 @@ var childProc = require('child_process');
 
 
 var specFile = 'apispec.json';
+var childProcTimeout = 2 * 60 * 1000; // 2mins
 
 
 
@@ -349,10 +350,13 @@ var prepareInvoker = function(args, done) {
 
   preparedInvokers[invokerName] = true;
 
-  childProc.exec('npm run ' + args.command,
-    { cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
-      env: process.env || {} },
-    function(err, stdout, stderr) {
+  var options = { 
+    cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
+    env: process.env || {},
+    timeout: args.timeout || childProcTimeout
+  };
+
+  childProc.exec('npm run ' + args.command, options, function(err, stdout, stderr) {
       if (err) {
         err.stderr = stderr;
         err.stdout = stdout;
@@ -399,7 +403,8 @@ var prepareExecutable = function(args, done) {
     env: {
       APISPEC: JSON.stringify(apiSpec),
       PARAMETERS: JSON.stringify({ _: { executable_name: args.executable_name } })
-    }
+    },
+    timeout: args.timeout || childProcTimeout
   };
 
   options.env = _.extend(_.clone(process.env || {}), options.env);
@@ -596,7 +601,8 @@ var invokeExecutable = function(args, done) {
         env: {
           APISPEC: JSON.stringify(apiSpecCopy),
           PARAMETERS: JSON.stringify(enrichedParams)
-        }
+        },
+        timeout: args.timeout || childProcTimeout
       };
 
       options.env = _.extend(_.clone(process.env || {}), options.env);
