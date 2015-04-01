@@ -605,7 +605,7 @@ var invokeExecutable = function(args, done) {
           APISPEC: JSON.stringify(apiSpecCopy),
           PARAMETERS: JSON.stringify(enrichedParams)
         },
-        timeout: args.timeout || childProcTimeout,
+        timeout: instance.timeout || args.timeout || childProcTimeout,
         killSignal: childProcKillSignal
       };
 
@@ -630,7 +630,7 @@ var invokeExecutable = function(args, done) {
       var filesDir = instanceParams.instance_path;// || invokerPath;
 
       async.eachSeries(_.keys(results_schema), function(name, callback) {
-        var r = results_schema[name];
+        var r = results_schema[name] || {};
 
         if (r.mapping === 'stdout') {
           instance.results[name] = instance.results.stdout;
@@ -647,10 +647,14 @@ var invokeExecutable = function(args, done) {
             return callback(new Error('results file missing: ' + filePath));
           }
 
-          instance.results[name] = fs.readFileSync(filePath, 'utf8');
+          var options = {};
+
+          if (r.type !== 'byte_string') options.encoding = r.file_encoding || 'utf8';
+
+          instance.results[name] = fs.readFileSync(filePath, options);
         }
 
-        if (r.type === 'json_object') {
+        if (r.type === 'json_object' || r.type === 'json_array' || r.type === 'boolean' || r.type === 'number') {
           instance.results[name] = JSON.parse(instance.results[name]);
         }
 
