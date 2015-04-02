@@ -183,6 +183,26 @@ var readInput = function(args, callback) {
   try {
     if (process.env.PARAMETERS) {
       params = JSON.parse(process.env.PARAMETERS);
+
+      var executable = apiSpec.executables[params.executable_name];
+      var invoker = apiSpec.invokers[params.invoker_name];
+
+      var paramsSchema;
+
+      if (executable) {
+        paramsSchema = executable.parameters_schema;
+      } else if (invoker) {
+        paramsSchema = invoker.parameters_schema;
+      }
+
+      if (paramsSchema) {
+        _.each(params, function(value, name) {
+          if (paramsSchema[name] && paramsSchema[name].type === 'byte_string') {
+            if (_.isArray(value)) params[name] = new Buffer(value);
+            else if (_.isString(value)) params[name] = new Buffer(value, 'base64');
+          }
+        });
+      }
     }
   } catch (err) {
     return callback(err);
@@ -209,12 +229,15 @@ var writeSpec = function(args, callback) {
 
   if (args.access) {
     writeFile = function(callback) {
-      args.access.writeFile(
-        { path: specPath, content: JSON.stringify(apiSpec, null, 2) }, callback);
+      args.access.writeFile({
+        path: specPath,
+        content: JSON.stringify(apiSpec, null, 2),
+        encoding: 'utf8'
+      }, callback);
     }
   } else {
     writeFile = function(callback) {
-      fs.writeFile(specPath, JSON.stringify(apiSpec, null, 2), callback);
+      fs.writeFile(specPath, JSON.stringify(apiSpec, null, 2), { encoding: 'utf8' }, callback);
     }
   }
 
@@ -641,6 +664,7 @@ var invokeExecutable = function(args, done) {
         env: {
           APISPEC: JSON.stringify(apiSpecCopy),
           PARAMETERS: JSON.stringify(enrichedParams)
+          //TODO: potential optimization: enrichedParams: encode 'byte_string' params as base64
         },
         timeout: instance.timeout || args.timeout || childProcTimeout,
         killSignal: childProcKillSignal
@@ -782,20 +806,22 @@ var collectResults = function(args, done) {
 
             var content = null;
 
-            var options = {};
-            if (r.type !== 'byte_string') options.encoding = r.file_encoding || 'utf8';
+            var readWriteArgs = { path: remote };
+            if (r.type !== 'byte_string') readWriteArgs.encoding = r.encoding || r.file_encoding || 'utf8';
 
             async.series([
               async.apply(fs.mkdirs, path.dirname(local)),
               function(callback) {
-                access.readFile({ path: remote, options: options }, function(err, c) {
+                access.readFile(readWriteArgs, function(err, c) {
+                  if (r.type === 'byte_string' && _.isString(c)) c = new Buffer(c, 'base64');
+
                   content = c;
 
                   callback(err);
                 });
               },
               function(callback) {
-                fs.writeFile(local, content, options, callback);
+                fs.writeFile(local, content, readWriteArgs, callback);
               }
             ], callback);
           });
@@ -858,9 +884,13 @@ var writeParameters = function(args, done) {
 
         var absFilePath = path.join(remotePath, def.file_path);
 
+        var writeArgs = { path: absFilePath, content: val };
+        if (def.type === 'byte_string' && _.isString(val)) writeArgs.content = new Buffer(val, 'base64');
+        else if (def.type !== 'byte_string') writeArgs.encoding = def.encoding || def.file_encoding || 'utf8';
+
         async.series([
           async.apply(access.mkdir, { path: path.dirname(absFilePath) }),
-          async.apply(access.writeFile, { path: absFilePath, content: val })
+          async.apply(access.writeFile, writeArgs)
         ], callback);
       }, callback);
     }
@@ -969,44 +999,48 @@ var generateExampleSync = function(args) {
 var resolveTypeSync = function(def) {
   if (_.isEmpty(def.content_type)) delete def.content_type;
 
-  if (_.contains(validTypes, def.type)) return def;
+  if (!_.contains(validTypes, def.type)) {
+    def.type = def.type || '';
+    def.content_type = def.content_type || '';
+    var normalized = def.type.toLowerCase() + def.content_type.toLowerCase();
 
-  def.type = def.type || '';
-  def.content_type = def.content_type || '';
-  var normalized = def.type.toLowerCase() + def.content_type.toLowerCase();
+    if (S(normalized).contains('image') ||
+        S(normalized).contains('img') ||
+        S(normalized).contains('video') ||
+        S(normalized).contains('audio') ||
+        S(normalized).contains('bin') ||
+        S(normalized).contains('byte')) {
+      def.type = 'byte_string';
+    } else if (S(normalized).contains('string') ||
+               S(normalized).contains('text') ||
+               S(normalized).contains('txt') ||
+               S(normalized).contains('html') ||
+               S(normalized).contains('md') ||
+               S(normalized).contains('markdown')) {
+      def.type = 'text_string';
+    } else if (S(normalized).contains('yaml') ||
+               S(normalized).contains('yml')) {
+      def.type = 'text_string'; //TODO: support yaml_object
 
-  if (S(normalized).contains('image') ||
-      S(normalized).contains('img') ||
-      S(normalized).contains('video') ||
-      S(normalized).contains('audio') ||
-      S(normalized).contains('bin') ||
-      S(normalized).contains('byte')) {
-    def.type = 'byte_string';
-  } else if (S(normalized).contains('string') ||
-             S(normalized).contains('text') ||
-             S(normalized).contains('txt') ||
-             S(normalized).contains('html') ||
-             S(normalized).contains('md') ||
-             S(normalized).contains('markdown')) {
-    def.type = 'text_string';
-  } else if (S(normalized).contains('yaml') ||
-             S(normalized).contains('yml')) {
-    def.type = 'text_string'; //TODO: support yaml_object
+      if (_.isEmpty(def.content_type)) def.content_type = 'text/yaml; charset=utf-8';
+    } else if (S(normalized).contains('json')) {
+      def.type = 'json_object';
+    } else if (S(normalized).contains('xml')) {
+      def.type = 'xml_object';
+    }
+  }
 
-    if (_.isEmpty(def.content_type)) def.content_type = 'text/yaml; charset=utf-8';
-  } else if (S(normalized).contains('json')) {
-    def.type = 'json_object';
-
-    if (_.isEmpty(def.content_type)) def.content_type = 'application/json; charset=utf-8';
-  } else if (S(normalized).contains('xml')) {
-    def.type = 'xml_object';
-
-    if (_.isEmpty(def.content_type)) def.content_type = 'application/xml; charset=utf-8';
+  if (_.isEmpty(def.content_type)) {
+    if (def.type === 'json_object') {
+      def.content_type = 'application/json; charset=utf-8';
+    } else if (def.type === 'xml_object') {
+      def.content_type = 'application/xml; charset=utf-8';
+    } else {
+      delete def.content_type;
+    }
   }
 
   if (_.isEmpty(def.type)) def.type = 'text_string';
-
-  if (_.isEmpty(def.content_type)) delete def.content_type;
 
   return def;
 };
@@ -1039,5 +1073,5 @@ module.exports = {
 
   validTypes: validTypes,
   embeddedExecutableSchema: require('./executable_schema.json'),
-  embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'))
+  embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'), { encoding: 'utf8' })
 };
