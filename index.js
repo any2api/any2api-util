@@ -183,9 +183,10 @@ var readInput = function(args, callback) {
   try {
     if (process.env.PARAMETERS) {
       params = JSON.parse(process.env.PARAMETERS);
+      params._ = params._ || {};
 
-      var executable = apiSpec.executables[params.executable_name];
-      var invoker = apiSpec.invokers[params.invoker_name];
+      var executable = apiSpec.executables[params._.executable_name];
+      var invoker = apiSpec.invokers[params._.invoker_name];
 
       var paramsSchema;
 
@@ -611,8 +612,12 @@ var invokeExecutable = function(args, done) {
       }
 
       _.each(executable.parameters_schema, function(p, name) {
-        if (_.contains(executable.parameters_required, name) && !enrichedParams[name] && p.default) {
+        if (!enrichedParams[name] && _.contains(executable.parameters_required, name) && p.default) {
           enrichedParams[name] = p.default;
+        }
+
+        if (enrichedParams[name] && Buffer.isBuffer(enrichedParams[name])) {
+          enrichedParams[name] = enrichedParams[name].toString('base64');
         }
       });
 
@@ -664,7 +669,6 @@ var invokeExecutable = function(args, done) {
         env: {
           APISPEC: JSON.stringify(apiSpecCopy),
           PARAMETERS: JSON.stringify(enrichedParams)
-          //TODO: potential optimization: enrichedParams: encode 'byte_string' params as base64
         },
         timeout: instance.timeout || args.timeout || childProcTimeout,
         killSignal: childProcKillSignal
