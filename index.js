@@ -2,6 +2,7 @@ var debug = require('debug')(require('./package.json').name);
 var path = require('path');
 var _ = require('lodash');
 var fs = require('fs-extra');
+var S = require('string');
 var Decompress = null;
 var Download = null;
 var async = require('async');
@@ -17,6 +18,8 @@ var childProcTimeout = 2 * 60 * 1000; // 2mins
 var childProcKillSignal = 'SIGKILL';
 
 
+
+var validTypes = [ 'boolean', 'number', 'text_string', 'byte_string', 'json_object', 'json_array', 'xml_object' ];
 
 var download = function(args, callback) {
   debug('download', args);
@@ -248,6 +251,8 @@ var enrichSpec = function(args, done) {
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
 
+  if (apiSpec.enriched) return done(null, apiSpec);
+
   var basePath = args.basePath || path.dirname(apiSpec.apispec_path);
 
   async.series([
@@ -261,6 +266,9 @@ var enrichSpec = function(args, done) {
           invoker.parameters_schema = invokerJson.parameters_schema || {};
           invoker.parameters_required = invokerJson.parameters_required || [];
           invoker.results_schema = invokerJson.results_schema || {};
+
+          _.each(invoker.parameters_schema, resolveTypeSync);
+          _.each(invoker.results_schema, resolveTypeSync);
 
           callback();
         });
@@ -280,6 +288,9 @@ var enrichSpec = function(args, done) {
 
         var resultsSchema = _.clone(invoker.results_schema);
         executable.results_schema = _.extend(resultsSchema, executable.results_schema);
+
+        _.each(executable.parameters_schema, resolveTypeSync);
+        _.each(executable.results_schema, resolveTypeSync);
       });
 
       callback();
@@ -955,6 +966,51 @@ var generateExampleSync = function(args) {
   return example;
 };
 
+var resolveTypeSync = function(def) {
+  if (_.isEmpty(def.content_type)) delete def.content_type;
+
+  if (_.contains(validTypes, def.type)) return def;
+
+  def.type = def.type || '';
+  def.content_type = def.content_type || '';
+  var normalized = def.type.toLowerCase() + def.content_type.toLowerCase();
+
+  if (S(normalized).contains('image') ||
+      S(normalized).contains('img') ||
+      S(normalized).contains('video') ||
+      S(normalized).contains('audio') ||
+      S(normalized).contains('bin') ||
+      S(normalized).contains('byte')) {
+    def.type = 'byte_string';
+  } else if (S(normalized).contains('string') ||
+             S(normalized).contains('text') ||
+             S(normalized).contains('txt') ||
+             S(normalized).contains('html') ||
+             S(normalized).contains('md') ||
+             S(normalized).contains('markdown')) {
+    def.type = 'text_string';
+  } else if (S(normalized).contains('yaml') ||
+             S(normalized).contains('yml')) {
+    def.type = 'text_string'; //TODO: support yaml_object
+
+    if (_.isEmpty(def.content_type)) def.content_type = 'text/yaml; charset=utf-8';
+  } else if (S(normalized).contains('json')) {
+    def.type = 'json_object';
+
+    if (_.isEmpty(def.content_type)) def.content_type = 'application/json; charset=utf-8';
+  } else if (S(normalized).contains('xml')) {
+    def.type = 'xml_object';
+
+    if (_.isEmpty(def.content_type)) def.content_type = 'application/xml; charset=utf-8';
+  }
+
+  if (_.isEmpty(def.type)) def.type = 'text_string';
+
+  if (_.isEmpty(def.content_type)) delete def.content_type;
+
+  return def;
+};
+
 
 
 module.exports = {
@@ -981,6 +1037,7 @@ module.exports = {
   getMappedResultsSync: getMappedResultsSync,
   generateExampleSync: generateExampleSync,
 
+  validTypes: validTypes,
   embeddedExecutableSchema: require('./executable_schema.json'),
   embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'))
 };
