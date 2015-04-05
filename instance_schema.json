@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "status": { "type": "string" },
+
+    "parameters_stored": { "type": "array", "items": { "type": "string" } },
+    "results_stored": { "type": "array", "items": { "type": "string" } },
+
+    "created": { "type": "string" },
+    "finished": { "type": "string" },
+    "failed": { "type": "string" },
+
+    "error": { "type": "string" }
+  }
+}

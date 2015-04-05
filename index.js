@@ -430,15 +430,15 @@ var prepareInvoker = function(args, done) {
   };
 
   childProc.exec('npm run ' + args.command, options, function(err, stdout, stderr) {
-      if (err) {
-        err.stderr = stderr;
-        err.stdout = stdout;
+    if (err) {
+      err.stderr = stderr;
+      err.stdout = stdout;
 
-        return done(err);
-      }
+      return done(err);
+    }
 
-      done();
-    });
+    done();
+  });
 };
 
 var prepareBuildtime = function(args, done) {
@@ -484,21 +484,21 @@ var prepareExecutable = function(args, done) {
   options.env = _.extend(_.clone(process.env || {}), options.env);
 
   childProc.exec('npm run prepare-executable', options, function(err, stdout, stderr) {
-      if (err) {
-        err.stderr = stderr;
-        err.stdout = stdout;
+    if (err) {
+      err.stderr = stderr;
+      err.stdout = stdout;
 
-        return done(err);
-      }
+      return done(err);
+    }
 
-      readInput(apiSpec, function(err, apiSpec) {
-        if (err) return done(err);
+    readInput(apiSpec, function(err, apiSpec) {
+      if (err) return done(err);
 
-        apiSpec.executables[args.executable_name].prepared = true;
+      apiSpec.executables[args.executable_name].prepared = true;
 
-        done(null, apiSpec);
-      });
+      done(null, apiSpec);
     });
+  });
 };
 
 var persistEmbeddedExecutable = function(args, done) {
@@ -552,6 +552,7 @@ var invokeExecutable = function(args, done) {
   debug('invocation triggered', args);
 
   args = args || {};
+  args.npmLoglevel = args.npmLoglevel || 'silent'; // error, warn
 
   var apiSpec = args.apiSpec;
   if (!apiSpec) return done(new Error('API spec missing'));
@@ -676,7 +677,7 @@ var invokeExecutable = function(args, done) {
 
       options.env = _.extend(_.clone(process.env || {}), options.env);
 
-      childProc.exec('npm start', options, function(err, stdout, stderr) {
+      childProc.exec('npm start --loglevel ' + args.npmLoglevel, options, function(err, stdout, stderr) {
         debug('instance finished');
 
         instance.results = instance.results || {};
@@ -1077,5 +1078,6 @@ module.exports = {
 
   validTypes: validTypes,
   embeddedExecutableSchema: require('./executable_schema.json'),
-  embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'), { encoding: 'utf8' })
+  embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'), { encoding: 'utf8' }),
+  instanceSchema: require('./instance_schema.json')
 };
