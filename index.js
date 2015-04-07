@@ -19,7 +19,7 @@ var childProcKillSignal = 'SIGKILL';
 
 
 
-var validTypes = [ 'boolean', 'number', 'text_string', 'byte_string', 'json_object', 'json_array', 'xml_object' ];
+var validTypes = [ 'boolean', 'number', 'string', 'binary', 'json_object', 'json_array', 'xml_object' ];
 
 var download = function(args, callback) {
   debug('download', args);
@@ -198,7 +198,7 @@ var readInput = function(args, callback) {
 
       if (paramsSchema) {
         _.each(params, function(value, name) {
-          if (paramsSchema[name] && paramsSchema[name].type === 'byte_string') {
+          if (paramsSchema[name] && paramsSchema[name].type === 'binary') {
             if (_.isArray(value)) params[name] = new Buffer(value);
             else if (_.isString(value)) params[name] = new Buffer(value, 'base64');
           }
@@ -711,7 +711,7 @@ var invokeExecutable = function(args, done) {
 
           var options = {};
 
-          if (r.type !== 'byte_string') options.encoding = r.file_encoding || 'utf8';
+          if (r.type !== 'binary') options.encoding = r.file_encoding || 'utf8';
 
           instance.results[name] = fs.readFileSync(filePath, options);
         }
@@ -812,13 +812,13 @@ var collectResults = function(args, done) {
             var content = null;
 
             var readWriteArgs = { path: remote };
-            if (r.type !== 'byte_string') readWriteArgs.encoding = r.encoding || r.file_encoding || 'utf8';
+            if (r.type !== 'binary') readWriteArgs.encoding = r.encoding || r.file_encoding || 'utf8';
 
             async.series([
               async.apply(fs.mkdirs, path.dirname(local)),
               function(callback) {
                 access.readFile(readWriteArgs, function(err, c) {
-                  if (r.type === 'byte_string' && _.isString(c)) c = new Buffer(c, 'base64');
+                  if (r.type === 'binary' && _.isString(c)) c = new Buffer(c, 'base64');
 
                   content = c;
 
@@ -890,8 +890,8 @@ var writeParameters = function(args, done) {
         var absFilePath = path.join(remotePath, def.file_path);
 
         var writeArgs = { path: absFilePath, content: val };
-        if (def.type === 'byte_string' && _.isString(val)) writeArgs.content = new Buffer(val, 'base64');
-        else if (def.type !== 'byte_string') writeArgs.encoding = def.encoding || def.file_encoding || 'utf8';
+        if (def.type === 'binary' && _.isString(val)) writeArgs.content = new Buffer(val, 'base64');
+        else if (def.type !== 'binary') writeArgs.encoding = def.encoding || def.file_encoding || 'utf8';
 
         async.series([
           async.apply(access.mkdir, { path: path.dirname(absFilePath) }),
@@ -1015,17 +1015,17 @@ var resolveTypeSync = function(def) {
         S(normalized).contains('audio') ||
         S(normalized).contains('bin') ||
         S(normalized).contains('byte')) {
-      def.type = 'byte_string';
+      def.type = 'binary';
     } else if (S(normalized).contains('string') ||
                S(normalized).contains('text') ||
                S(normalized).contains('txt') ||
                S(normalized).contains('html') ||
                S(normalized).contains('md') ||
                S(normalized).contains('markdown')) {
-      def.type = 'text_string';
+      def.type = 'string';
     } else if (S(normalized).contains('yaml') ||
                S(normalized).contains('yml')) {
-      def.type = 'text_string'; //TODO: support yaml_object
+      def.type = 'string'; //TODO: support yaml_object
 
       if (_.isEmpty(def.content_type)) def.content_type = 'text/yaml; charset=utf-8';
     } else if (S(normalized).contains('json')) {
@@ -1045,7 +1045,7 @@ var resolveTypeSync = function(def) {
     }
   }
 
-  if (_.isEmpty(def.type)) def.type = 'text_string';
+  if (_.isEmpty(def.type)) def.type = 'string';
 
   return def;
 };
