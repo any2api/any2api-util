@@ -1,4 +1,4 @@
-<choice minOccurs="1" maxOccurs="1">
+<choice minOccurs="0" maxOccurs="1">
   <element name="files">
     <complexType>
       <sequence>
@@ -7,7 +7,7 @@
             <simpleContent>
               <extension base="xsd:string">
                 <attribute name="path" type="xsd:string" use="required"/>
-                <attribute name="contentSource" use="required">
+                <attribute name="processContentAs" use="required">
                   <simpleType>
                     <restriction base="xsd:string">
                       <enumeration value="text"/>
@@ -23,5 +23,21 @@
       </sequence>
     </complexType>
   </element>
-  <element name="tarballUrl" type="xsd:string"/>
+  <element name="tarball">
+    <complexType>
+      <simpleContent>
+        <extension base="xsd:string">
+          <attribute name="path" type="xsd:string" use="required"/>
+          <attribute name="processContentAs" use="required">
+            <simpleType>
+              <restriction base="xsd:string">
+                <enumeration value="base64"/>
+                <enumeration value="url"/>
+              </restriction>
+            </simpleType>
+          </attribute>
+        </extension>
+      </simpleContent>
+    </complexType>
+  </element>
 </choice>

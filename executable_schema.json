@@ -39,7 +39,23 @@
     },
     {
       "properties": {
-        "tarball_url": { "type": "string" }
+        "tarball": {
+          "type": "object",
+          "oneOf": [
+            {
+              "properties": {
+                "path": { "type": "string" },
+                "base64": { "type": "string" }
+              }
+            },
+            {
+              "properties": {
+                "path": { "type": "string" },
+                "url": { "type": "string" }
+              }
+            }
+          ]
+        }
       }
     }
   ]
