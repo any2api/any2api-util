@@ -1,0 +1,42 @@
+<sequence>
+  <element name="id" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+  <element name="description" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+  <element name="status" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+  <!--<element name="instance_config" minOccurs="0" maxOccurs="1">
+    <complexType>
+      <sequence>-->
+        <element name="store_results" minOccurs="0" maxOccurs="1" default="all">
+          <simpleType>
+            <restriction base="xsd:string">
+              <enumeration value="all"/>
+              <enumeration value="all_but_parameters"/>
+              <enumeration value="schema"/>
+            </restriction>
+          </simpleType>
+        </element>
+      <!--</sequence>
+    </complexType>
+  </element>-->
+
+  <element name="parameters_stored" minOccurs="0" maxOccurs="1">
+    <complexType>
+      <sequence>
+        <element name="name" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
+      </sequence>
+    </complexType>
+  </element>
+  <element name="results_stored" minOccurs="0" maxOccurs="1">
+    <complexType>
+      <sequence>
+        <element name="name" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
+      </sequence>
+    </complexType>
+  </element>
+
+  <element name="created" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+  <element name="finished" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+  <element name="failed" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+
+  <any minOccurs="0" maxOccurs="unbounded" namespace="##targetNamespace"/>
+</sequence>
+<anyAttribute/>

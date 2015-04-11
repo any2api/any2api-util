@@ -2,7 +2,9 @@
   "type": "object",
   "properties": {
     "id": { "type": "string" },
+    "description": { "type": "string" },
     "status": { "type": "string" },
+    "store_results": { "enum": [ "all", "all_but_parameters", "schema" ], "default": "all" },
 
     "parameters_stored": { "type": "array", "items": { "type": "string" } },
     "results_stored": { "type": "array", "items": { "type": "string" } },

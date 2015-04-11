@@ -9,6 +9,7 @@ var async = require('async');
 var shortId = require('shortid');
 var temp = null;
 var request = null;
+var recursive = require('recursive-readdir');
 var childProc = require('child_process');
 
 
@@ -43,7 +44,7 @@ var download = function(args, callback) {
   }
 
   var download = new Download({
-    extract: true, //TODO: make this configurable through args?
+    extract: true, //TODO: make configurable
     strip: args.strip
   }).get(args.url);
 
@@ -74,7 +75,7 @@ var extract = function(args, callback) {
   }
 
   var decompress = new Decompress({
-    mode: '755' //TODO: configurable?
+    mode: '755' //TODO: make configurable
   }).src(args.file).dest(args.dir)
     .use(Decompress.zip({ strip: 1 }))
     .use(Decompress.tar({ strip: 1 }))
@@ -284,7 +285,7 @@ var enrichSpec = function(args, done) {
       async.each(_.keys(apiSpec.invokers), function(name, callback) {
         var invoker = apiSpec.invokers[name];
 
-        getInvokerJson({ apiSpec: apiSpec, invokerName: name, basePath: basePath }, function(err, invokerJson) {
+        getInvokerJson({ invoker: invoker, basePath: basePath }, function(err, invokerJson) {
           if (err) return callback(err);
 
           invoker.parameters_schema = invokerJson.parameters_schema || {};
@@ -331,21 +332,12 @@ var enrichSpec = function(args, done) {
 var getInvokerJson = function(args, done) {
   args = args || {};
 
-  var apiSpec = args.apiSpec;
-  if (!apiSpec) return done(new Error('API spec missing'));
+  var invoker = args.invoker;
+  if (!invoker) return done(new Error('invoker missing'));
 
-  var basePath = args.basePath || path.dirname(apiSpec.apispec_path);
+  var basePath = args.basePath || '.'; // || path.dirname(apiSpec.apispec_path);
 
-  var invokerPath;
-
-  if (args.executableName) {
-    var executable = apiSpec.executables[args.executableName];
-
-    invokerPath = apiSpec.invokers[executable.invoker_name].path;
-  } else if (args.invokerName) {
-    invokerPath = apiSpec.invokers[args.invokerName].path;
-  }
-
+  var invokerPath = invoker.path;
   if (!invokerPath) return done(new Error('invoker path cannot be determined'));
   else invokerPath = path.resolve(basePath, invokerPath);
 
@@ -511,7 +503,7 @@ var persistEmbeddedExecutable = function(args, done) {
   if (!executable) return done(new Error('Executable missing'));
   else if (!executable.files) return done(new Error('Executable has no files'));
 
-  //TODO: support executable.tarball_url
+  //TODO: support executable.tarball.url|base64
 
   debug('persisting executable', executable);
 
@@ -568,6 +560,8 @@ var invokeExecutable = function(args, done) {
   var instanceParams;
   var enrichedParams;
 
+  var resultFilesProcessed = [];
+
   async.series([
     function(callback) {
       cloneSpec({ apiSpec: apiSpec }, function(err, cloned) {
@@ -602,7 +596,8 @@ var invokeExecutable = function(args, done) {
       if (_.isEmpty(instance.parameters)) instance.parameters = {};
 
       instanceParams = { instance_id: instance._id || instance.id || 'instance-' + shortId.generate(),
-                         instance_path: args.instance_path || temp.path({ prefix: 'tmp-instance-' }) };
+                         instance_path: args.instance_path || temp.path({ prefix: 'tmp-instance-' }),
+                         store_results: instance.store_results };
       enrichedParams = _.clone(instance.parameters);
       enrichedParams._ = instanceParams;
 
@@ -689,8 +684,6 @@ var invokeExecutable = function(args, done) {
       });
     },
     function(callback) {
-      var filesDir = instanceParams.instance_path;// || invokerPath;
-
       async.eachSeries(_.keys(executable.results_schema), function(name, callback) {
         var r = executable.results_schema[name] || {};
 
@@ -702,11 +695,12 @@ var invokeExecutable = function(args, done) {
           instance.results[name] = instance.results.stderr;
 
           delete instance.results.stderr;
+        //TODO: r.mapping === 'dir' && r.dir_path -> compress content in dir_path and put as buffer to instance.results obj
         } else if (r.mapping === 'file' && r.file_path) {
-          var filePath = path.resolve(filesDir, r.file_path);
+          var filePath = path.resolve(instanceParams.instance_path, r.file_path);
 
           if (!fs.existsSync(filePath)) {
-            return callback(new Error('results file missing: ' + filePath));
+            return console.error('result file missing: ' + filePath);
           }
 
           var options = {};
@@ -720,8 +714,36 @@ var invokeExecutable = function(args, done) {
           instance.results[name] = JSON.parse(instance.results[name]);
         }
 
+        resultFilesProcessed.push(filePath);
+
         callback();
       }, callback);
+    },
+    function(callback) {
+      if (instance.store_results === 'schema') return callback();
+
+      if (instance.store_results === 'all_but_parameters') {
+        _.each(executable.parameters_schema, function(p, name) {
+          //TODO: also consider p.dir_path
+          var filePath = path.resolve(instanceParams.instance_path, p.file_path);
+
+          resultFilesProcessed.push(filePath);
+        });
+      }
+
+      recursive(instanceParams.instance_path, function(err, files) {
+        if (err) return callback(err);
+
+        _.each(files, function(file) {
+          file = path.normalize(file);
+
+          if (_.contains(resultFilesProcessed, file)) return;
+
+          instance.results[file] = fs.readFileSync(file);
+        });
+
+        callback();
+      });
     }
   ], function(err) {
     if (err) {
@@ -751,11 +773,22 @@ var invokeExecutable = function(args, done) {
   });
 };
 
+/*
+{
+  executable:
+  invoker:
+  localPath:
+  remotePath: 
+  access: 
+  apiSpecPath:
+  apiSpecEnriched
+}
+*/
 var collectResults = function(args, done) {
   args = args || {};
 
-  var apiSpec = args.apiSpec;
-  if (!apiSpec) return done(new Error('API spec missing'));
+  var executable = args.executable || {};
+  var invoker = args.invoker || {};
 
   var access = args.access;
   if (!access) return done(new Error('access missing'));
@@ -766,25 +799,19 @@ var collectResults = function(args, done) {
   var remotePath = args.remotePath;
   if (!remotePath) return done(new Error('remotePath missing'));
 
-  var executable = apiSpec.executables[args.executable_name];
-  var invoker = apiSpec.invokers[args.invoker_name];
+  var apiSpecPath = args.apiSpecPath;
+  if (!apiSpecPath) return done(new Error('apiSpecPath missing'));
 
-  if (!executable && !invoker) return done(new Error('either executable_name or invoker_name must be valid'));
-
-  var resultsSchema;
+  var resultsSchema = executable.results_schema || invoker.results_schema || {};
 
   async.series([
     function(callback) {
-      resultsSchema = executable.results_schema;
+      if (args.apiSpecEnriched || _.isEmpty(invoker)) return callback();
 
-      if (apiSpec.enriched) return callback();
-
-      getInvokerJson({ apiSpec: apiSpec,
-                       executableName:args.executable_name,
-                       invokerName: args.invoker_name }, function(err, invokerJson) {
+      getInvokerJson({ invoker: invoker, basePath: path.dirname(apiSpecPath) }, function(err, invokerJson) {
         if (err) return callback(err);
 
-        resultsSchema = _.extend(invokerJson.results_schema, executable.results_schema);
+        resultsSchema = _.extend(invokerJson.results_schema, resultsSchema);
 
         callback();
       });
@@ -795,10 +822,10 @@ var collectResults = function(args, done) {
       async.eachSeries(_.keys(resultsSchema), function(name, callback) {
         var r = resultsSchema[name];
 
-        //TODO support for r.mapping = 'dir'
         if (r.mapping === 'file' && r.file_path) {
           var local = path.resolve(localPath, r.file_path);
-          var remote = path.join(remotePath, r.file_path);
+          var remote = r.file_path;
+          if (!S(r.file_path).startsWith('/')) remote = path.join(remotePath, r.file_path); //TODO path.isAbsolute()
 
           access.exists({ path: remote }, function(err, exists) {
             if (err) return callback(err);
@@ -830,6 +857,22 @@ var collectResults = function(args, done) {
               }
             ], callback);
           });
+        } else if (r.mapping === 'dir' && r.dir_path) {
+          var local = path.resolve(localPath, r.dir_path);
+          var remote = r.dir_path;
+          if (!S(r.dir_path).startsWith('/')) remote = path.join(remotePath, r.dir_path); //TODO path.isAbsolute()
+
+          access.exists({ path: remote }, function(err, exists) {
+            if (err) return callback(err);
+
+            if (!exists) {
+              debug('dir does not exist remotely: ' + remote);
+
+              return callback();
+            }
+
+            access.copyDirFromRemote({ sourcePath: remote, targetPath: local }, callback);
+          });
         } else {
           callback();
         }
@@ -838,14 +881,27 @@ var collectResults = function(args, done) {
   ], done);
 };
 
+/*
+{
+  executable:
+  invoker:
+  parameters: 
+  remotePath: 
+  access: 
+  apiSpecPath:
+  apiSpecEnriched
+}
+*/
 var writeParameters = function(args, done) {
+  if (!temp) temp = require('temp').track();
+
   args = args || {};
 
-  var apiSpec = args.apiSpec;
-  if (!apiSpec) return done(new Error('API spec missing'));
+  var executable = args.executable || {};
+  var invoker = args.invoker || {};
 
   var params = args.parameters;
-  if (!params) return done(new Error('parameters missing'));
+  if (_.isEmpty(params)) return done();
 
   var access = args.access;
   if (!access) return done(new Error('access missing'));
@@ -853,25 +909,19 @@ var writeParameters = function(args, done) {
   var remotePath = args.remotePath;
   if (!remotePath) return done(new Error('remotePath missing'));
 
-  var executable = apiSpec.executables[args.executable_name];
-  var invoker = apiSpec.invokers[args.invoker_name];
+  var apiSpecPath = args.apiSpecPath;
+  if (!apiSpecPath) return done(new Error('apiSpecPath missing'));
 
-  if (!executable && !invoker) return done(new Error('either executable_name or invoker_name must be valid'));
-
-  var paramsSchema;
+  var paramsSchema = executable.parameters_schema || invoker.parameters_schema || {};
 
   async.series([
     function(callback) {
-      paramsSchema = executable.parameters_schema;
+      if (args.apiSpecEnriched || _.isEmpty(invoker)) return callback();
 
-      if (apiSpec.enriched) return callback();
-
-      getInvokerJson({ apiSpec: apiSpec,
-                       executableName:args.executable_name,
-                       invokerName: args.invoker_name }, function(err, invokerJson) {
+      getInvokerJson({ invoker: invoker, basePath: path.dirname(apiSpecPath) }, function(err, invokerJson) {
         if (err) return callback(err);
 
-        paramsSchema = _.extend(invokerJson.parameters_schema, executable.parameters_schema);
+        paramsSchema = _.extend(invokerJson.parameters_schema, paramsSchema);
 
         callback();
       });
@@ -879,24 +929,50 @@ var writeParameters = function(args, done) {
     function(callback) {
       if (_.isEmpty(paramsSchema)) return callback();
 
-      async.eachSeries(_.keys(executable.parameters_schema), function(name, callback) {
-        var def = executable.parameters_schema[name];
+      async.eachSeries(_.keys(paramsSchema), function(name, callback) {
+        var def = paramsSchema[name];
         var val = params[name];
 
-        if (def.mapping !== 'file' || !def.file_path || !val) {
-          return callback();
+        if (def.mapping === 'file' && def.file_path && val) {
+          var remoteFilePath = def.file_path;
+          if (!S(def.file_path).startsWith('/')) remoteFilePath = path.join(remotePath, def.file_path); //TODO path.isAbsolute()
+
+          var writeArgs = { path: remoteFilePath, content: val };
+          if (def.type === 'binary' && _.isString(val)) writeArgs.content = new Buffer(val, 'base64');
+          else if (def.type !== 'binary') writeArgs.encoding = def.encoding || def.file_encoding || 'utf8';
+
+          async.series([
+            async.apply(access.mkdir, { path: path.dirname(remoteFilePath) }),
+            async.apply(access.writeFile, writeArgs)
+          ], callback);
+        } else if (def.mapping === 'dir' && def.dir_path && val) {
+          var remoteDirPath = def.dir_path;
+          if (!S(def.dir_path).startsWith('/')) remoteDirPath = path.join(remotePath, def.dir_path); //TODO path.isAbsolute()
+
+          var localDirPath;
+
+          if (_.isString(val)) val = new Buffer(val, 'base64');
+
+          var copyArgs = {
+            sourcePath: localDirPath,
+            targetPath: remoteDirPath
+          };
+
+          async.series([
+            function(callback) {
+              temp.mkdir('tmp-param-dir', function(err, tempDirPath) {
+                localDirPath = tempDirPath;
+
+                callback(err);
+              });
+            },
+            async.apply(extract, { file: val, dir: localDirPath }),
+            async.apply(access.copyDirToRemote, copyArgs),
+            async.apply(access.remove, { path: localDirPath })
+          ], callback);
+        } else {
+          callback();
         }
-
-        var absFilePath = path.join(remotePath, def.file_path);
-
-        var writeArgs = { path: absFilePath, content: val };
-        if (def.type === 'binary' && _.isString(val)) writeArgs.content = new Buffer(val, 'base64');
-        else if (def.type !== 'binary') writeArgs.encoding = def.encoding || def.file_encoding || 'utf8';
-
-        async.series([
-          async.apply(access.mkdir, { path: path.dirname(absFilePath) }),
-          async.apply(access.writeFile, writeArgs)
-        ], callback);
       }, callback);
     }
   ], done);
@@ -975,7 +1051,7 @@ var generateExampleSync = function(args) {
       invoker_config: {
         some_config_param: 'some_value'
       },
-      some_param: 'some_value'
+      another_param: 'another_value'
     }
   };
 
@@ -1007,30 +1083,30 @@ var resolveTypeSync = function(def) {
   if (!_.contains(validTypes, def.type)) {
     def.type = def.type || '';
     def.content_type = def.content_type || '';
-    var normalized = def.type.toLowerCase() + def.content_type.toLowerCase();
+    var normalized = S(def.type.toLowerCase() + def.content_type.toLowerCase());
 
-    if (S(normalized).contains('image') ||
-        S(normalized).contains('img') ||
-        S(normalized).contains('video') ||
-        S(normalized).contains('audio') ||
-        S(normalized).contains('bin') ||
-        S(normalized).contains('byte')) {
+    if (normalized.contains('image') ||
+        normalized.contains('img') ||
+        normalized.contains('video') ||
+        normalized.contains('audio') ||
+        normalized.contains('bin') ||
+        normalized.contains('byte')) {
       def.type = 'binary';
-    } else if (S(normalized).contains('string') ||
-               S(normalized).contains('text') ||
-               S(normalized).contains('txt') ||
-               S(normalized).contains('html') ||
-               S(normalized).contains('md') ||
-               S(normalized).contains('markdown')) {
+    } else if (normalized.contains('string') ||
+               normalized.contains('text') ||
+               normalized.contains('txt') ||
+               normalized.contains('html') ||
+               normalized.contains('md') ||
+               normalized.contains('markdown')) {
       def.type = 'string';
-    } else if (S(normalized).contains('yaml') ||
-               S(normalized).contains('yml')) {
+    } else if (normalized.contains('yaml') ||
+               normalized.contains('yml')) {
       def.type = 'string'; //TODO: support yaml_object
 
       if (_.isEmpty(def.content_type)) def.content_type = 'text/yaml; charset=utf-8';
-    } else if (S(normalized).contains('json')) {
+    } else if (normalized.contains('json')) {
       def.type = 'json_object';
-    } else if (S(normalized).contains('xml')) {
+    } else if (normalized.contains('xml')) {
       def.type = 'xml_object';
     }
   }
@@ -1063,7 +1139,6 @@ module.exports = {
   cloneSpec: cloneSpec,
   enrichSpec: enrichSpec,
 
-  getInvokerJson: getInvokerJson,
   updateInvokers: updateInvokers,
   prepareBuildtime: prepareBuildtime,
   prepareRuntime: prepareRuntime,
@@ -1079,5 +1154,6 @@ module.exports = {
   validTypes: validTypes,
   embeddedExecutableSchema: require('./executable_schema.json'),
   embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'), { encoding: 'utf8' }),
-  instanceSchema: require('./instance_schema.json')
+  instanceSchema: require('./instance_schema.json'),
+  instanceSchemaXml: fs.readFileSync(path.resolve(__dirname, 'instance_schema.xsd'), { encoding: 'utf8' })
 };
