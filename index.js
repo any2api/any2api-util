@@ -720,7 +720,7 @@ var invokeExecutable = function(args, done) {
       }, callback);
     },
     function(callback) {
-      if (instance.store_results === 'schema') return callback();
+      if (instance.store_results === 'schema_only') return callback();
 
       if (instance.store_results === 'all_but_parameters') {
         _.each(executable.parameters_schema, function(p, name) {
@@ -773,17 +773,6 @@ var invokeExecutable = function(args, done) {
   });
 };
 
-/*
-{
-  executable:
-  invoker:
-  localPath:
-  remotePath: 
-  access: 
-  apiSpecPath:
-  apiSpecEnriched
-}
-*/
 var collectResults = function(args, done) {
   args = args || {};
 
@@ -881,17 +870,6 @@ var collectResults = function(args, done) {
   ], done);
 };
 
-/*
-{
-  executable:
-  invoker:
-  parameters: 
-  remotePath: 
-  access: 
-  apiSpecPath:
-  apiSpecEnriched
-}
-*/
 var writeParameters = function(args, done) {
   if (!temp) temp = require('temp').track();
 

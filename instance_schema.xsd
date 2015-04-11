@@ -10,7 +10,7 @@
             <restriction base="xsd:string">
               <enumeration value="all"/>
               <enumeration value="all_but_parameters"/>
-              <enumeration value="schema"/>
+              <enumeration value="schema_only"/>
             </restriction>
           </simpleType>
         </element>
