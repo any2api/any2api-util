@@ -17,7 +17,7 @@ var childProc = require('child_process');
 var specFile = 'apispec.json';
 var childProcTimeout = 2 * 60 * 1000; // 2mins
 var childProcKillSignal = 'SIGKILL';
-
+var childProcMaxBuffer = 500 * 1024; // 500kb
 
 
 var validTypes = [ 'boolean', 'number', 'string', 'binary', 'json_object', 'json_array', 'xml_object' ];
@@ -418,7 +418,8 @@ var prepareInvoker = function(args, done) {
     cwd: path.resolve(apiSpec.apispec_path, '..', invoker.path),
     env: process.env || {},
     timeout: args.timeout || childProcTimeout,
-    killSignal: childProcKillSignal
+    killSignal: childProcKillSignal,
+    maxBuffer: childProcMaxBuffer
   };
 
   childProc.exec('npm run ' + args.command, options, function(err, stdout, stderr) {
@@ -470,7 +471,8 @@ var prepareExecutable = function(args, done) {
       PARAMETERS: JSON.stringify({ _: { executable_name: args.executable_name } })
     },
     timeout: args.timeout || childProcTimeout,
-    killSignal: childProcKillSignal
+    killSignal: childProcKillSignal,
+    maxBuffer: childProcMaxBuffer
   };
 
   options.env = _.extend(_.clone(process.env || {}), options.env);
@@ -601,6 +603,8 @@ var invokeExecutable = function(args, done) {
       enrichedParams = _.clone(instance.parameters);
       enrichedParams._ = instanceParams;
 
+      fs.mkdirsSync(instanceParams.instance_path);
+
       if (executable) {
         executable.name = args.executable_name || executable.name;
 
@@ -667,7 +671,8 @@ var invokeExecutable = function(args, done) {
           PARAMETERS: JSON.stringify(enrichedParams)
         },
         timeout: instance.timeout || args.timeout || childProcTimeout,
-        killSignal: childProcKillSignal
+        killSignal: childProcKillSignal,
+        maxBuffer: childProcMaxBuffer
       };
 
       options.env = _.extend(_.clone(process.env || {}), options.env);
@@ -684,6 +689,8 @@ var invokeExecutable = function(args, done) {
       });
     },
     function(callback) {
+      if (_.isEmpty(executable.results_schema)) return callback();
+
       async.eachSeries(_.keys(executable.results_schema), function(name, callback) {
         var r = executable.results_schema[name] || {};
 
@@ -732,7 +739,7 @@ var invokeExecutable = function(args, done) {
       }
 
       recursive(instanceParams.instance_path, function(err, files) {
-        if (err) return callback(err);
+        if (err || _.isEmpty(files)) return callback(err);
 
         _.each(files, function(file) {
           file = path.normalize(file);
@@ -931,11 +938,6 @@ var writeParameters = function(args, done) {
 
           if (_.isString(val)) val = new Buffer(val, 'base64');
 
-          var copyArgs = {
-            sourcePath: localDirPath,
-            targetPath: remoteDirPath
-          };
-
           async.series([
             function(callback) {
               temp.mkdir('tmp-param-dir', function(err, tempDirPath) {
@@ -944,9 +946,15 @@ var writeParameters = function(args, done) {
                 callback(err);
               });
             },
-            async.apply(extract, { file: val, dir: localDirPath }),
-            async.apply(access.copyDirToRemote, copyArgs),
-            async.apply(access.remove, { path: localDirPath })
+            function(callback) {
+              extract({ file: val, dir: localDirPath }, callback);
+            },
+            function(callback) {
+              access.copyDirToRemote({ sourcePath: localDirPath, targetPath: remoteDirPath }, callback);
+            },
+            function(callback) {
+              access.remove({ path: localDirPath }, callback);
+            }
           ], callback);
         } else {
           callback();
