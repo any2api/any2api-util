@@ -17,6 +17,7 @@
       <!--</sequence>
     </complexType>
   </element>-->
+  <element name="timeout" type="xsd:decimal" minOccurs="0" maxOccurs="1"/>
 
   <element name="parameters_stored" minOccurs="0" maxOccurs="1">
     <complexType>

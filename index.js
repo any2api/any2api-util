@@ -15,7 +15,7 @@ var childProc = require('child_process');
 
 
 var specFile = 'apispec.json';
-var childProcTimeout = 2 * 60 * 1000; // 2mins
+var childProcTimeout = 5 * 60 * 1000; // 5mins
 var childProcKillSignal = 'SIGKILL';
 var childProcMaxBuffer = 500 * 1024; // 500kb
 
