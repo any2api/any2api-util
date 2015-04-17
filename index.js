@@ -1141,5 +1141,7 @@ module.exports = {
   embeddedExecutableSchema: require('./executable_schema.json'),
   embeddedExecutableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'executable_schema.xsd'), { encoding: 'utf8' }),
   instanceSchema: require('./instance_schema.json'),
-  instanceSchemaXml: fs.readFileSync(path.resolve(__dirname, 'instance_schema.xsd'), { encoding: 'utf8' })
+  instanceSchemaXml: fs.readFileSync(path.resolve(__dirname, 'instance_schema.xsd'), { encoding: 'utf8' }),
+  instanceWritableSchema: require('./instance_writable_schema.json'),
+  instanceWritableSchemaXml: fs.readFileSync(path.resolve(__dirname, 'instance_writable_schema.xsd'), { encoding: 'utf8' })
 };

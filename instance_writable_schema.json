@@ -6,14 +6,5 @@
     "status": { "enum": [ "prepare", "running", "finished", "failed" ], "default": "running" },
     "store_results": { "enum": [ "all", "all_but_parameters", "schema_only" ], "default": "all" },
     "timeout": { "type": "number" },
-
-    "parameters_stored": { "type": "array", "items": { "type": "string" } },
-    "results_stored": { "type": "array", "items": { "type": "string" } },
-
-    "created": { "type": "string" },
-    "finished": { "type": "string" },
-    "failed": { "type": "string" },
-
-    "error": { "type": "string" }
   }
 }
