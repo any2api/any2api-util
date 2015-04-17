@@ -5,6 +5,6 @@
     "description": { "type": "string" },
     "status": { "enum": [ "prepare", "running", "finished", "failed" ], "default": "running" },
     "store_results": { "enum": [ "all", "all_but_parameters", "schema_only" ], "default": "all" },
-    "timeout": { "type": "number" },
+    "timeout": { "type": "number" }
   }
 }
