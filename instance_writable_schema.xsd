@@ -1,7 +1,6 @@
 <sequence>
   <element name="id" type="xsd:string" minOccurs="0" maxOccurs="1"/>
   <element name="description" type="xsd:string" minOccurs="0" maxOccurs="1"/>
-  <element name="status" type="xsd:string" minOccurs="0" maxOccurs="1"/>
   <element name="status" minOccurs="0" maxOccurs="1" default="running">
     <simpleType>
       <restriction base="xsd:string">
