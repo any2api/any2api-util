@@ -609,17 +609,17 @@ var invokeExecutable = function(args, done) {
         executable.name = args.executable_name || executable.name;
 
         instanceParams.executable_name = executable.name;
+
+        _.each(executable.parameters_schema, function(p, name) {
+          if (!enrichedParams[name] && _.contains(executable.parameters_required, name) && p.default) {
+            enrichedParams[name] = p.default;
+          }
+
+          if (enrichedParams[name] && Buffer.isBuffer(enrichedParams[name])) {
+            enrichedParams[name] = enrichedParams[name].toString('base64');
+          }
+        });
       }
-
-      _.each(executable.parameters_schema, function(p, name) {
-        if (!enrichedParams[name] && _.contains(executable.parameters_required, name) && p.default) {
-          enrichedParams[name] = p.default;
-        }
-
-        if (enrichedParams[name] && Buffer.isBuffer(enrichedParams[name])) {
-          enrichedParams[name] = enrichedParams[name].toString('base64');
-        }
-      });
 
       debug('enriched params', enrichedParams);
 
@@ -631,35 +631,31 @@ var invokeExecutable = function(args, done) {
       persistEmbeddedExecutable({ executable: executable }, callback);
     },
     function(callback) {
-      if (executable && !executable.prepared) {
-        debug('preparing buildtime');
+      if (!executable || executable.prepared) return callback();
 
-        prepareBuildtime({ apiSpec: apiSpecCopy,
-                           preparedInvokers: preparedInvokers,
-                           executable_name: args.executable_name || executable.name },
-                         callback);
-      } else {
-        callback();
-      }
+      debug('preparing buildtime');
+
+      prepareBuildtime({ apiSpec: apiSpecCopy,
+                         preparedInvokers: preparedInvokers,
+                         executable_name: args.executable_name || executable.name },
+                       callback);
     },
     function(callback) {
-      if (executable && !executable.prepared) {
-        debug('preparing executable');
+      if (!executable || executable.prepared) return callback();
 
-        var updateSpecCallback = function(err, updApiSpec) {
-          if (err) return callback(err);
+      debug('preparing executable');
 
-          if (updApiSpec) apiSpecCopy = updApiSpec;
+      var updateSpecCallback = function(err, updApiSpec) {
+        if (err) return callback(err);
 
-          callback();
-        };
+        if (updApiSpec) apiSpecCopy = updApiSpec;
 
-        prepareExecutable({ apiSpec: apiSpecCopy,
-                            executable_name: args.executable_name || executable.name },
-                          updateSpecCallback);
-      } else {
         callback();
-      }
+      };
+
+      prepareExecutable({ apiSpec: apiSpecCopy,
+                          executable_name: args.executable_name || executable.name },
+                        updateSpecCallback);
     },
     function(callback) {
       debug('running executable');
@@ -689,7 +685,7 @@ var invokeExecutable = function(args, done) {
       });
     },
     function(callback) {
-      if (_.isEmpty(executable.results_schema)) return callback();
+      if (!executable || _.isEmpty(executable.results_schema)) return callback();
 
       async.eachSeries(_.keys(executable.results_schema), function(name, callback) {
         var r = executable.results_schema[name] || {};
@@ -729,7 +725,7 @@ var invokeExecutable = function(args, done) {
     function(callback) {
       if (instance.store_results === 'schema_only') return callback();
 
-      if (instance.store_results === 'all_but_parameters') {
+      if (instance.store_results === 'all_but_parameters' && executable) {
         _.each(executable.parameters_schema, function(p, name) {
           //TODO: also consider p.dir_path
           var filePath = path.resolve(instanceParams.instance_path, p.file_path);
