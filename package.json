@@ -1,6 +1,6 @@
 {
   "name": "any2api-util",
-  "version": "0.2.0",
+  "version": "0.2.8",
   "author": "Johannes Wettinger <mail@jojow.de>",
   "description": "Util functions for any2api (download, extract, checkout, etc.)",
   "repository": {
@@ -24,7 +24,7 @@
     "debug": "~2.1.0",
     "download": "~3.1.2",
     "decompress": "~2.1.0",
-    "fs-extra": "~0.12.0",
+    "fs-extra": "~0.18.3",
     "async": "~0.9.0",
     "shortid": "~2.1.3",
     "temp": "~0.8.1",
@@ -33,8 +33,7 @@
     "split": "~0.3.3",
     "concat-stream": "~1.4.8",
     "through2": "~0.6.5",
-    "unzip": "~0.1.11",
-    "tar-stream": "~1.1.4"
+    "tar-fs": "~1.5.0"
   },
   "engines": {
     "node": ">= 0.10"
